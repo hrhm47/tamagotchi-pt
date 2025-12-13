@@ -6,6 +6,7 @@
 #include "PinConfig.h"
 #include "AudioRecorder.h"
 #include "WifiServer.h"
+#include "ApiClient.h"
 
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 
@@ -105,22 +106,36 @@ void triggerSendMessage() {
   tft.println("Sending...");
   delay(1000);
 
-  // 2. Success Screen (The "Mock" Feedback)
-  tft.fillScreen(ST77XX_GREEN);
-  tft.setTextColor(ST77XX_BLACK);
+  String selectedMessage = messages[currentSelection];
+  int httpCode = sendApiMessage(selectedMessage, false);
+  delay(1000);
+
+  if (httpCode == 201 || httpCode == 200) {
+    Serial.println("Message sent successfully.");
+    tft.fillScreen(ST77XX_GREEN);
+    tft.setTextColor(ST77XX_BLACK);
   
-  tft.setCursor(10, 40);
-  tft.setTextSize(3);
-  tft.println("SENT!");
+    tft.setCursor(10, 40);
+    tft.setTextSize(3);
+    tft.println("SENT!");
   
-  tft.setTextSize(2);
-  tft.setCursor(10, 90);
-  tft.println("Notified:");
+    tft.setTextSize(2);
+    tft.setCursor(10, 90);
+    tft.println("Notified:");
   
-  // Show who we notified based on the array
-  tft.setTextColor(ST77XX_RED);
-  tft.setCursor(10, 120);
-  tft.println(notifyWho[currentSelection]);
+    // Show who we notified based on the array
+    tft.setTextColor(ST77XX_RED);
+    tft.setCursor(10, 120);
+    tft.println(notifyWho[currentSelection]);
+  } else {
+    Serial.println("Failed to send message.");
+    tft.fillScreen(ST77XX_RED);
+    tft.setTextColor(ST77XX_BLACK);
+  
+    tft.setCursor(10, 40);
+    tft.setTextSize(3);
+    tft.println("Sending message FAILED!");
+  }
   
   delay(3000); // Show for 3 seconds
   
@@ -141,14 +156,60 @@ void setup() {
 
   if(!SPIFFS.begin(true)) return;
 
-  drawMenu();
+  if (connectToWiFi(tft)) {
+    // Try to login to the API so bearerToken is available for later uploads
+    bool loggedIn = false;
+    int loginAttempts = 0;
+    while (!loggedIn && loginAttempts < 3) {
+      if (loginToApi()) {
+        loggedIn = true;
+        Serial.println("API login succeeded");
+      } else {
+        loginAttempts++;
+        Serial.printf("API login attempt %d failed\n", loginAttempts);
+        delay(1500);
+      }
+    }
+
+    if (!loggedIn) {
+      // Let the user know we'll retry later (non-blocking retry can be added in loop)
+      tft.fillScreen(ST77XX_YELLOW);
+      tft.setTextColor(ST77XX_RED);
+      tft.setTextSize(2);
+      tft.setCursor(10, 60); tft.println("API LOGIN FAILED");
+      tft.setTextSize(1);
+      tft.setCursor(10, 100); tft.println("Will retry later...");
+      delay(1500);
+    }
+
+    drawMenu();
+  }
+
+  //drawMenu();
 }
 
 void loop() {
   // If not in menu (Panic mode), keep server alive
   if (!inMenu) {
-    handleWebServer();
-    return;
+    handleWebServer(); // Keep handling client requests
+
+    // --- NEW: Check for EXIT condition (BTN_NAV press) ---
+    if (digitalRead(BTN_NAV) == LOW) {
+      // 1. Clean Up
+      stopWebServer();
+      
+      // 2. Reset State
+      inMenu = true;
+      
+      // 3. Redraw Menu
+      drawMenu();
+      
+      // Debounce
+      while(digitalRead(BTN_NAV) == LOW); 
+      delay(50);
+      return; // Exit loop iteration to prevent running menu logic
+    }
+    return; // Stay in server mode
   }
 
   // --- 1. HANDLE NAVIGATION (Single Button Cycling) ---
