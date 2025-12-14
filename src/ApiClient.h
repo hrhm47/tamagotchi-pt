@@ -78,8 +78,8 @@ bool loginToApi() {
 // Send the text message
 int sendApiMessage(String message, bool isPanic) {
   if (bearerToken == "") {
-    return 401;
-  }   
+    return -1; // Indicate error
+  }
 
   HTTPClient http;
   http.begin(String(serverBaseUrl) + "/reports");
@@ -89,9 +89,7 @@ int sendApiMessage(String message, bool isPanic) {
   StaticJsonDocument<300> doc;
   doc["description"] = message;
   doc["is_anonymous"] = false;
-  
-  // Adding the "Dummy" data requested by your team member
-  doc["latitude"] = 65.0123;   // Dummy Oulu coordinates
+  doc["latitude"] = 65.0123;
   doc["longitude"] = 25.4681;
   doc["status"] = isPanic ? "emergency" : "normal"; 
 
@@ -99,34 +97,60 @@ int sendApiMessage(String message, bool isPanic) {
   serializeJson(doc, requestBody);
 
   int httpCode = http.POST(requestBody);
-  Serial.printf("API Response: %d\n", httpCode);
-  http.end();
+  Serial.printf("API Response Code: %d\n", httpCode);
 
-  return httpCode;
+  int reportId = -1; // Default to error
+
+  if (httpCode == 200 || httpCode == 201) {
+        // CAPTURE THE STRING ONCE
+        String payload = http.getString(); 
+        
+        // Use the variable for your Serial logs
+        Serial.print("Raw Server Response: ");
+        Serial.println(payload);
+
+        StaticJsonDocument<1024> responseDoc;
+        // PARSE THE VARIABLE, NOT THE STREAM
+        DeserializationError error = deserializeJson(responseDoc, payload); 
+
+        if (!error && responseDoc.containsKey("id")) {
+            reportId = responseDoc["id"].as<int>();
+            Serial.printf("Parsed Report ID: %d\n", reportId);
+        } else if (error) {
+            Serial.printf("JSON Error: %s\n", error.c_str());
+        }
+    }
+
+    http.end();
+    return reportId; // Now returning the actual database ID
 }
 
 // Upload the recorded .wav file
-void uploadAudioFile() {
-    if (bearerToken == "") return;
+void uploadAudioFile(int reportId) {
+    if (bearerToken == "" || reportId <= 0) return;
 
-    File file = SPIFFS.open(FILE_NAME, "r");
+    File file = SPIFFS.open(FILE_NAME, "r"); // Opens the recorded .wav
     if (!file) {
         Serial.println("No audio file found to upload.");
         return;
     }
 
     HTTPClient http;
-    // Note: You will need a specific endpoint in your Laravel/App for file uploads
-    http.begin(String(serverBaseUrl) + "/reports/audio"); 
-    http.addHeader("Authorization", "Bearer " + bearerToken);
+    String uploadUrl = String(serverBaseUrl) + "/reports/" + String(reportId) + "/audio"; 
+    
+    http.begin(uploadUrl);
+    http.addHeader("Authorization", "Bearer " + bearerToken); // Auth from loginToApi()
     http.addHeader("Content-Type", "audio/wav");
 
-    // This streams the file directly from SPIFFS to the API
+    // Stream the file from SPIFFS directly to the PHP server
     int httpCode = http.sendRequest("POST", &file, file.size());
 
-    if (httpCode > 0) {
-        Serial.printf("Audio Uploaded. Status: %d\n", httpCode);
+    if (httpCode == 200) {
+        Serial.println("Audio Upload Success!");
+    } else {
+        Serial.printf("Audio Upload Failed, code: %d\n", httpCode);
     }
+
     file.close();
     http.end();
 }

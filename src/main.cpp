@@ -71,25 +71,33 @@ void drawMenu() {
 
 // Action 1: PANIC MODE (Double Click)
 void triggerPanic() {
-  Serial.println("PANIC TRIGGERED!");
-  enterClicks = 0;
   waitingForSingleClick = false;
+  enterClicks = 0;
+  Serial.println("PANIC TRIGGERED!");
   inMenu = false;
 
-  // 1. Visual Alarm
-  tft.fillScreen(ST77XX_RED);
-  tft.setTextColor(ST77XX_WHITE);
-  tft.setTextSize(3);
-  tft.setCursor(40, 80);
-  tft.println("PANIC!");
-  delay(500);
+  // 1. Record the Audio
+  initMic(); //
+  recordAudio(tft); // Saves to SPIFFS
 
-  // 2. Start Recording
-  initMic();
-  recordAudio(tft);
+  // 2. Send the initial SOS report to get a Report ID
+  // Note: Ensure your sendApiMessage returns the ID from the MySQL 'insert'
+  int reportId = sendApiMessage("SOS ALERT!", true); //
 
-  // 3. Go to Wi-Fi
-  startWebServer(tft);
+  if (reportId > 0) {
+    tft.fillScreen(ST77XX_ORANGE);
+    tft.setCursor(10, 80);
+    tft.println("UPLOADING VOICE...");
+    
+    uploadAudioFile(reportId); // Send the SPIFFS file to your PHP server
+  }
+
+  // 3. Cleanup and return to menu
+  tft.fillScreen(ST77XX_GREEN);
+  tft.println("SENT TO CLOUD");
+  delay(2000);
+  inMenu = true;
+  drawMenu(); //
 }
 
 // Action 2: SEND MESSAGE (Single Click)
@@ -107,10 +115,10 @@ void triggerSendMessage() {
   delay(1000);
 
   String selectedMessage = messages[currentSelection];
-  int httpCode = sendApiMessage(selectedMessage, false);
+  int reportId = sendApiMessage(selectedMessage, false);
   delay(1000);
 
-  if (httpCode == 201 || httpCode == 200) {
+  if (reportId != -1) {
     Serial.println("Message sent successfully.");
     tft.fillScreen(ST77XX_GREEN);
     tft.setTextColor(ST77XX_BLACK);
