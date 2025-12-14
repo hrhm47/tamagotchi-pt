@@ -41,30 +41,48 @@ bool waitingForSingleClick = false;
 void drawMenu() {
   tft.fillScreen(ST77XX_BLACK);
   
-  // Header
+  // 1. Draw Fixed Header
   tft.fillRect(0, 0, 240, 40, ST77XX_BLUE);
   tft.setTextColor(ST77XX_WHITE);
   tft.setTextSize(2);
   tft.setCursor(10, 10);
   tft.println("MY STATUS:");
   
-  // List
-  for(int i=0; i<totalMessages; i++) {
-    int y = 60 + (i * 35); // Spacing
+  // 2. Scrolling Logic
+  int itemHeight = 30; // Reduced from 35 to fit more on screen
+  int listTopY = 45;   // Start just below the header
+  
+  // Calculate which item should be at the top of the visible list
+  // This keeps the selection visible on small 135px screens
+  int visibleWindow = 3; 
+  int firstVisibleItem = 0;
+  
+  if (currentSelection >= visibleWindow) {
+    firstVisibleItem = currentSelection - (visibleWindow - 1);
+  }
+
+  // 3. Draw List
+  for(int i = 0; i < totalMessages; i++) {
+    // Relative position based on the scroll
+    int relativeIndex = i - firstVisibleItem;
+    int y = listTopY + (relativeIndex * itemHeight);
     
-    if(i == currentSelection) {
-      // Highlighted Item
-      tft.fillRect(0, y-5, 240, 30, 0x2124); // Dark Grey Background
-      tft.setTextColor(ST77XX_GREEN);
-      tft.setCursor(10, y);
-      tft.print("> ");
-      tft.println(messages[i]);
-    } else {
-      // Normal Item
-      tft.setTextColor(ST77XX_WHITE);
-      tft.setCursor(10, y);
-      tft.print("  ");
-      tft.println(messages[i]);
+    // Only draw if within the visible area below header
+    if (relativeIndex >= 0 && relativeIndex < visibleWindow) {
+      if(i == currentSelection) {
+        // Highlighted Item
+        tft.fillRect(0, y - 2, 240, 26, 0x2124); // Dark Grey
+        tft.setTextColor(ST77XX_GREEN);
+        tft.setCursor(10, y);
+        tft.print("> ");
+        tft.println(messages[i]);
+      } else {
+        // Normal Item
+        tft.setTextColor(ST77XX_WHITE);
+        tft.setCursor(10, y);
+        tft.print("  ");
+        tft.println(messages[i]);
+      }
     }
   }
 }
@@ -72,7 +90,7 @@ void drawMenu() {
 // Action 1: PANIC MODE (Double Click)
 void triggerPanic() {
   waitingForSingleClick = false;
-  enterClicks = 0;
+  //enterClicks = 0;
   Serial.println("PANIC TRIGGERED!");
   inMenu = false;
 
