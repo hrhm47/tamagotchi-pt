@@ -4,7 +4,7 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
-#include <SPIFFS.h>
+#include <LittleFS.h>
 #include "PinConfig.h"
 
 // REPLACE with your computer's actual IP address
@@ -56,7 +56,6 @@ bool loginToApi() {
         bearerToken.trim();
         Serial.print("API Login Success! Bearer Token: ");
         Serial.println(bearerToken);
-        Serial.println("API Login Success!");
         http.end();
         return true;
     }
@@ -129,7 +128,7 @@ int sendApiMessage(String message, bool isPanic) {
 void uploadAudioFile(int reportId) {
     if (bearerToken == "" || reportId <= 0) return;
 
-    File file = SPIFFS.open(FILE_NAME, "r"); // Opens the recorded .wav
+    File file = LittleFS.open(FILE_NAME, "r"); // Opens the recorded .wav
     if (!file) {
         Serial.println("No audio file found to upload.");
         return;

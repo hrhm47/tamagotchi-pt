@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
-#include <SPIFFS.h>
+#include <LittleFS.h>
 
 #include "PinConfig.h"
 #include "AudioRecorder.h"
@@ -90,17 +90,14 @@ void drawMenu() {
 // Action 1: PANIC MODE (Double Click)
 void triggerPanic() {
   waitingForSingleClick = false;
-  //enterClicks = 0;
+  enterClicks = 0;
   Serial.println("PANIC TRIGGERED!");
   inMenu = false;
 
-  // 1. Record the Audio
-  initMic(); //
-  recordAudio(tft); // Saves to SPIFFS
+  initMic();
+  recordAudio(tft);
 
-  // 2. Send the initial SOS report to get a Report ID
-  // Note: Ensure your sendApiMessage returns the ID from the MySQL 'insert'
-  int reportId = sendApiMessage("SOS ALERT!", true); //
+  int reportId = sendApiMessage("SOS ALERT!", true);
 
   if (reportId > 0) {
     tft.fillScreen(ST77XX_ORANGE);
@@ -180,7 +177,10 @@ void setup() {
   pinMode(BTN_NAV, INPUT_PULLUP);
   pinMode(BTN_ENTER, INPUT_PULLUP);
 
-  if(!SPIFFS.begin(true)) return;
+  if(!LittleFS.begin(true)) {
+    Serial.println("LittleFS Mount Failed");
+    return;
+  }
 
   if (connectToWiFi(tft)) {
     // Try to login to the API so bearerToken is available for later uploads

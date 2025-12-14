@@ -41,8 +41,8 @@ void initMic() {
 }
 
 void recordAudio(Adafruit_ST7789 &tft) {
-  SPIFFS.remove(FILE_NAME);
-  File file = SPIFFS.open(FILE_NAME, FILE_WRITE);
+  LittleFS.remove(FILE_NAME);
+  File file = LittleFS.open(FILE_NAME, FILE_WRITE);
   if(!file){ Serial.println("File Error"); return; }
 
   // UI Setup
@@ -85,7 +85,7 @@ void recordAudio(Adafruit_ST7789 &tft) {
     samples_recorded += samples_in_batch;
 
     // 4. Smooth Animation
-    if(millis() - last_draw > 200) {
+    if(millis() - last_draw > 300) {
         last_draw = millis();
         float percent = (float)samples_recorded / (float)total_samples;
         int w = (int)(percent * 196);
