@@ -13,71 +13,52 @@ Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 // --- MENU DATA ---
 // You can add as many as you want. The menu loops.
 const char* messages[] = {
-  "I am Safe",
-  "Bus is Late",
-  "Pick me up",
-  "SOS ALERT"
-};
-
-// "Mock" data: Who gets the alert?
-const char* notifyWho[] = {
-  "Parents",       // For "I am Safe"
-  "School & Mom",  // For "Bus is Late"
-  "Dad (Driver)",  // For "Pick me up"
-  "EVERYONE!"      // For "SOS ALERT"
+  "Keinuilla",      // At the swings
+  "Aulassa",        // In the lobby
+  "Ruokalassa",     // In the cafeteria
+  "Kaytavalla",     // In the hallway
+  "Pukuhuoneessa",  // In the locker room
+  "Vessassa",       // In the toilet
 };
 
 int currentSelection = 0;
-int totalMessages = 4;
+int totalMessages = 6;
 bool inMenu = true;
 
-// --- BUTTON TIMING ---
 unsigned long lastEnterTime = 0;
 int enterClicks = 0;
 bool waitingForSingleClick = false;
 
-// --- FUNCTIONS ---
-
 void drawMenu() {
   tft.fillScreen(ST77XX_BLACK);
   
-  // 1. Draw Fixed Header
   tft.fillRect(0, 0, 240, 40, ST77XX_BLUE);
   tft.setTextColor(ST77XX_WHITE);
   tft.setTextSize(2);
   tft.setCursor(10, 10);
-  tft.println("MY STATUS:");
+  tft.println("ILMOITA KIUSAAMINEN:");
   
-  // 2. Scrolling Logic
-  int itemHeight = 30; // Reduced from 35 to fit more on screen
-  int listTopY = 45;   // Start just below the header
-  
-  // Calculate which item should be at the top of the visible list
-  // This keeps the selection visible on small 135px screens
-  int visibleWindow = 3; 
+  int itemHeight = 30;
+  int listTopY = 45;
+  int visibleOnWindow = 3; 
   int firstVisibleItem = 0;
   
-  if (currentSelection >= visibleWindow) {
-    firstVisibleItem = currentSelection - (visibleWindow - 1);
+  if (currentSelection >= visibleOnWindow) {
+    firstVisibleItem = currentSelection - (visibleOnWindow - 1);
   }
 
-  // 3. Draw List
   for(int i = 0; i < totalMessages; i++) {
-    // Relative position based on the scroll
     int relativeIndex = i - firstVisibleItem;
     int y = listTopY + (relativeIndex * itemHeight);
-    
-    // Only draw if within the visible area below header
-    if (relativeIndex >= 0 && relativeIndex < visibleWindow) {
+
+    if (relativeIndex >= 0 && relativeIndex < visibleOnWindow) {
       if(i == currentSelection) {
-        // Highlighted Item
         tft.fillRect(0, y - 2, 240, 26, 0x2124); // Dark Grey
         tft.setTextColor(ST77XX_GREEN);
         tft.setCursor(10, y);
         tft.print("> ");
         tft.println(messages[i]);
       } else {
-        // Normal Item
         tft.setTextColor(ST77XX_WHITE);
         tft.setCursor(10, y);
         tft.print("  ");
@@ -87,7 +68,6 @@ void drawMenu() {
   }
 }
 
-// Action 1: PANIC MODE (Double Click)
 void triggerPanic() {
   waitingForSingleClick = false;
   enterClicks = 0;
@@ -96,32 +76,27 @@ void triggerPanic() {
 
   initMic();
   recordAudio(tft);
-
-  int reportId = sendApiMessage("SOS ALERT!", true);
+  int reportId = sendApiReport();
 
   if (reportId > 0) {
     tft.fillScreen(ST77XX_ORANGE);
     tft.setCursor(10, 80);
     tft.println("UPLOADING VOICE...");
-    
-    uploadAudioFile(reportId); // Send the SPIFFS file to your PHP server
+    sendApiVoiceRecording(reportId);
   }
 
-  // 3. Cleanup and return to menu
   tft.fillScreen(ST77XX_GREEN);
   tft.println("SENT TO CLOUD");
   delay(2000);
   inMenu = true;
-  drawMenu(); //
+  drawMenu();
 }
 
-// Action 2: SEND MESSAGE (Single Click)
 void triggerSendMessage() {
   Serial.println("Sending Message...");
   enterClicks = 0;
   waitingForSingleClick = false;
   
-  // 1. sending animation
   tft.fillScreen(ST77XX_BLACK);
   tft.setTextColor(ST77XX_WHITE);
   tft.setTextSize(2);
@@ -129,11 +104,22 @@ void triggerSendMessage() {
   tft.println("Sending...");
   delay(1000);
 
-  String selectedMessage = messages[currentSelection];
-  int reportId = sendApiMessage(selectedMessage, false);
-  delay(1000);
+  int reportId = sendApiReport();
+  int msgId = -1;
 
   if (reportId != -1) {
+    Serial.printf("Report created with ID: %d\n", reportId);
+
+    Serial.println("Sending Message Content...");
+    String selectedMessage = messages[currentSelection];
+    msgId = sendApiMessage(selectedMessage, reportId);
+  } else {
+    Serial.println("Failed to create report.");
+  }
+
+  delay(1000);
+
+  if (msgId != -1) {
     Serial.println("Message sent successfully.");
     tft.fillScreen(ST77XX_GREEN);
     tft.setTextColor(ST77XX_BLACK);
@@ -146,10 +132,8 @@ void triggerSendMessage() {
     tft.setCursor(10, 90);
     tft.println("Notified:");
   
-    // Show who we notified based on the array
     tft.setTextColor(ST77XX_RED);
     tft.setCursor(10, 120);
-    tft.println(notifyWho[currentSelection]);
   } else {
     Serial.println("Failed to send message.");
     tft.fillScreen(ST77XX_RED);
@@ -160,20 +144,15 @@ void triggerSendMessage() {
     tft.println("Sending message FAILED!");
   }
   
-  delay(3000); // Show for 3 seconds
-  
-  // 3. Return to Menu
+  delay(3000);
   drawMenu();
 }
 
 void setup() {
   Serial.begin(115200);
-  
-  // Hardware Init
   pinMode(TFT_BL, OUTPUT); digitalWrite(TFT_BL, HIGH);
   tft.init(135, 240); tft.setRotation(1); tft.fillScreen(ST77XX_BLACK);
   
-  // Button Init (2 Buttons)
   pinMode(BTN_NAV, INPUT_PULLUP);
   pinMode(BTN_ENTER, INPUT_PULLUP);
 
@@ -183,13 +162,11 @@ void setup() {
   }
 
   if (connectToWiFi(tft)) {
-    // Try to login to the API so bearerToken is available for later uploads
     bool loggedIn = false;
     int loginAttempts = 0;
     while (!loggedIn && loginAttempts < 3) {
       if (loginToApi()) {
         loggedIn = true;
-        Serial.println("API login succeeded");
       } else {
         loginAttempts++;
         Serial.printf("API login attempt %d failed\n", loginAttempts);
@@ -217,12 +194,12 @@ void setup() {
 void loop() {
   // If not in menu (Panic mode), keep server alive
   if (!inMenu) {
-    handleWebServer(); // Keep handling client requests
+    //handleWebServer(); // Keep handling client requests
 
     // --- NEW: Check for EXIT condition (BTN_NAV press) ---
     if (digitalRead(BTN_NAV) == LOW) {
       // 1. Clean Up
-      stopWebServer();
+      //stopWebServer();
       
       // 2. Reset State
       inMenu = true;
@@ -274,37 +251,3 @@ void loop() {
      triggerSendMessage();
   }
 }
-
-
-// #include <Arduino.h>
-
-// // Pins
-// #define BTN_NAV   25
-// #define BTN_ENTER 26
-
-// void setup() {
-//   Serial.begin(115200);
-  
-//   // Use Internal Pullup (High by default, Low when pressed)
-//   pinMode(BTN_NAV, INPUT_PULLUP);
-//   pinMode(BTN_ENTER, INPUT_PULLUP);
-  
-//   Serial.println("--- BUTTON HARDWARE TEST ---");
-// }
-
-// void loop() {
-//   // Read States
-//   int navState = digitalRead(BTN_NAV);     // 1 = Open, 0 = Pressed
-//   int enterState = digitalRead(BTN_ENTER); // 1 = Open, 0 = Pressed
-
-//   // Print Status
-//   Serial.print("NAV (Pin 25): ");
-//   if(navState == 0) Serial.print("PRESSED  |  ");
-//   else              Serial.print("OPEN     |  ");
-
-//   Serial.print("ENTER (Pin 26): ");
-//   if(enterState == 0) Serial.println("PRESSED");
-//   else                Serial.println("OPEN");
-
-//   delay(200); // Slow down so you can read it
-// }

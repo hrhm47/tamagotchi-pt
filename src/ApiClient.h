@@ -6,152 +6,244 @@
 #include <ArduinoJson.h>
 #include <LittleFS.h>
 #include "PinConfig.h"
+#include <WiFiClientSecure.h>
 
-// REPLACE with your computer's actual IP address
-const char* serverBaseUrl = "http://192.168.100.49:8000/api/v1"; 
+const char* serverBaseUrl = "https://poliisiautoweb.onrender.com/api/v1"; 
 String bearerToken = "";
 
-// Get the token from the login endpoint
 bool loginToApi() {
+    WiFiClientSecure client;
+    client.setInsecure();
     HTTPClient http;
-    String loginUrl = String(serverBaseUrl) + "/login";
-    Serial.print("Attempting API login to: "); Serial.println(loginUrl);
-    Serial.print("WiFi status: "); Serial.println(WiFi.status());
-    Serial.print("Local IP: "); Serial.println(WiFi.localIP().toString());
-    http.begin(loginUrl);
-    http.addHeader("Content-Type", "application/json");
 
-    StaticJsonDocument<200> doc;
-    doc["email"] = "kerttu.k@esimerkki.fi"; // Using student credentials from your API docs
-    doc["password"] = "salasana";
+    String loginUrl = String(serverBaseUrl) + "/login"; 
+    Serial.println("Logging in...");
+
+    http.begin(client, loginUrl);
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("Accept", "application/json");
+
+    // Use DynamicJsonDocument to be safe with stack memory
+    DynamicJsonDocument doc(512); 
+    doc["email"] = "testitamakotsi@example.com";
+    doc["password"] = "testi1234";
     doc["device_name"] = "SafeGotchi_ESP32";
-    doc["api_key"] = "secret123";
+    doc["api_key"] = "Zek1eSpDZv97dYoNL82KHCsHqHF8rTBc";
 
     String requestBody;
     serializeJson(doc, requestBody);
-    Serial.print("Login request body: ");
-    Serial.println(requestBody);
 
     int httpCode = http.POST(requestBody);
+
     if (httpCode == 200) {
-        // Get raw response body
         String respBody = http.getString();
-        Serial.print("Login response body (raw): ");
-        Serial.println(respBody);
+        
+        DynamicJsonDocument respDoc(1024);
+        deserializeJson(respDoc, respBody);
 
-        // 1) Try parsing JSON response { "token": "..." }
-        StaticJsonDocument<1024> respDoc;
-        DeserializationError err = deserializeJson(respDoc, respBody);
-        if (!err && respDoc.containsKey("token")) {
-            bearerToken = respDoc["token"].as<String>();
-        } else {
-            // 2) Fallback: take last non-empty line from the response (handles warnings + plain token)
-            int lastNewline = respBody.lastIndexOf('\n');
-            String tokenCandidate = respBody;
-            if (lastNewline >= 0) tokenCandidate = respBody.substring(lastNewline + 1);
-            tokenCandidate.trim();
-            bearerToken = tokenCandidate;
-        }
-
-        bearerToken.trim();
-        Serial.print("API Login Success! Bearer Token: ");
-        Serial.println(bearerToken);
-        http.end();
-        return true;
+        if (respDoc.containsKey("access_token")) {
+            bearerToken = respDoc["access_token"].as<String>();
+            Serial.print("access token: "); 
+            Serial.println(bearerToken);
+            http.end();
+            return true;
+        } 
     }
-    if (httpCode > 0) {
-        // Server returned an HTTP error status; print body for diagnostics
-        String resp = http.getString();
-        Serial.printf("Login Failed: %d\n", httpCode);
-        if (resp.length()) {
-            Serial.print("Response body: "); Serial.println(resp);
-        }
-    } else {
-        // Negative codes are network/connection errors from HTTPClient
-        Serial.printf("Login Failed: %d (network/connection error)\n", httpCode);
-    }
+    
+    Serial.printf("Login Failed: %d\n", httpCode);
     http.end();
     return false;
 }
 
-// Send the text message
-int sendApiMessage(String message, bool isPanic) {
+int sendApiReport() {
+    if (bearerToken == "") {
+        return -1;
+    }
+    
+    HTTPClient http;
+    http.begin(String(serverBaseUrl) + "/reports");
+    http.addHeader("Authorization", "Bearer " + bearerToken);
+    http.addHeader("Content-Type", "application/json");
+    
+    StaticJsonDocument<300> doc;
+    doc["description"] = "Test Report from Device";
+    doc["is_anonymous"] = false;
+    
+    String requestBody;
+    serializeJson(doc, requestBody);
+    
+    int httpCode = http.POST(requestBody);
+    Serial.printf("API Response Code: %d\n", httpCode);
+    
+    int reportId = -1; // Default to error
+    
+    if (httpCode == 200 || httpCode == 201) {
+            String payload = http.getString(); 
+            Serial.print("Raw Server Response: ");
+            Serial.println(payload);
+    
+            StaticJsonDocument<1024> responseDoc;
+            DeserializationError error = deserializeJson(responseDoc, payload); 
+    
+            if (!error && responseDoc.containsKey("id")) {
+                reportId = responseDoc["id"].as<int>();
+                Serial.printf("Parsed Report ID: %d\n", reportId);
+            } else if (error) {
+                Serial.printf("JSON Error: %s\n", error.c_str());
+            }
+        }
+    
+        http.end();
+        return reportId;
+}
+
+int sendApiMessage(String message, int reportId) {
   if (bearerToken == "") {
-    return -1; // Indicate error
+    return -1;
   }
 
   HTTPClient http;
-  http.begin(String(serverBaseUrl) + "/reports");
+  String url = String(serverBaseUrl) + "/reports/" + String(reportId) + "/messages"; 
+  http.begin(url);
   http.addHeader("Authorization", "Bearer " + bearerToken);
   http.addHeader("Content-Type", "application/json");
 
   StaticJsonDocument<300> doc;
-  doc["description"] = message;
-  doc["is_anonymous"] = false;
-  doc["latitude"] = 65.0123;
-  doc["longitude"] = 25.4681;
-  doc["status"] = isPanic ? "emergency" : "normal"; 
+  doc["content"] = message;
+  doc["is_anonymous"] = 0;
+  doc["type"] = "text";
+  doc["lat"] = 65.0123;
+  doc["lon"] = 25.4681;
 
   String requestBody;
   serializeJson(doc, requestBody);
 
+  Serial.printf("Sending API Message to: %s\n", url.c_str());
   int httpCode = http.POST(requestBody);
   Serial.printf("API Response Code: %d\n", httpCode);
 
-  int reportId = -1; // Default to error
+  int messageId = -1;
 
   if (httpCode == 200 || httpCode == 201) {
-        // CAPTURE THE STRING ONCE
         String payload = http.getString(); 
         
-        // Use the variable for your Serial logs
         Serial.print("Raw Server Response: ");
         Serial.println(payload);
 
         StaticJsonDocument<1024> responseDoc;
-        // PARSE THE VARIABLE, NOT THE STREAM
         DeserializationError error = deserializeJson(responseDoc, payload); 
 
         if (!error && responseDoc.containsKey("id")) {
-            reportId = responseDoc["id"].as<int>();
-            Serial.printf("Parsed Report ID: %d\n", reportId);
+            messageId = responseDoc["id"].as<int>();
+            Serial.printf("Message ID: %d\n", messageId);
         } else if (error) {
             Serial.printf("JSON Error: %s\n", error.c_str());
         }
+    } else {
+        String response = http.getString();
+        Serial.print("SERVER ERROR: ");
+        Serial.println(response);
     }
 
     http.end();
-    return reportId; // Now returning the actual database ID
+    return messageId;
 }
 
 // Upload the recorded .wav file
-void uploadAudioFile(int reportId) {
-    if (bearerToken == "" || reportId <= 0) return;
-
-    File file = LittleFS.open(FILE_NAME, "r"); // Opens the recorded .wav
-    if (!file) {
-        Serial.println("No audio file found to upload.");
+void sendApiVoiceRecording(int reportId) {
+    if (bearerToken == "" || reportId <= 0) {
+        Serial.println("Error: Missing Token or Report ID");
         return;
     }
 
-    HTTPClient http;
-    String uploadUrl = String(serverBaseUrl) + "/reports/" + String(reportId) + "/audio"; 
+    File file = LittleFS.open(FILE_NAME, "r");
+    if (!file) {
+        Serial.println("No audio file found in memory.");
+        return;
+    }
+
+    // 1. Setup Connection
+    WiFiClientSecure client;
+    client.setInsecure(); // Skip certificate check
     
-    http.begin(uploadUrl);
-    http.addHeader("Authorization", "Bearer " + bearerToken); // Auth from loginToApi()
-    http.addHeader("Content-Type", "audio/wav");
+    // Parse the domain and port from your serverBaseUrl
+    // Assuming serverBaseUrl is "https://poliisiautoweb.onrender.com/api/v1"
+    const char* host = "poliisiautoweb.onrender.com"; 
+    const int port = 443;
 
-    // Stream the file from SPIFFS directly to the PHP server
-    int httpCode = http.sendRequest("POST", &file, file.size());
+    Serial.println("Connecting to upload audio...");
+    if (!client.connect(host, port)) {
+        Serial.println("Connection failed!");
+        file.close();
+        return;
+    }
 
-    if (httpCode == 200) {
-        Serial.println("Audio Upload Success!");
-    } else {
-        Serial.printf("Audio Upload Failed, code: %d\n", httpCode);
+    // 2. Prepare Multipart Data
+    String boundary = "------------------------Esp32Boundary7MA4YWxkTrZu0gW";
+    
+    // The "Head" contains all your text fields (lat, lon, type)
+    String headPayload = "";
+    headPayload += "--" + boundary + "\r\n";
+    headPayload += "Content-Disposition: form-data; name=\"type\"\r\n\r\naudio\r\n";
+    
+    headPayload += "--" + boundary + "\r\n";
+    headPayload += "Content-Disposition: form-data; name=\"is_anonymous\"\r\n\r\n0\r\n"; // Matches curl '0'
+    
+    headPayload += "--" + boundary + "\r\n";
+    headPayload += "Content-Disposition: form-data; name=\"lat\"\r\n\r\n60.1699\r\n"; // Replace with variable if needed
+    
+    headPayload += "--" + boundary + "\r\n";
+    headPayload += "Content-Disposition: form-data; name=\"lon\"\r\n\r\n24.9384\r\n";
+
+    // The File Header
+    headPayload += "--" + boundary + "\r\n";
+    headPayload += "Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n";
+    headPayload += "Content-Type: audio/wav\r\n\r\n";
+
+    // The "Tail" is just the closing boundary
+    String tailPayload = "\r\n--" + boundary + "--\r\n";
+
+    // 3. Calculate Total Size
+    size_t totalLen = headPayload.length() + file.size() + tailPayload.length();
+
+    // 4. Send HTTP Headers
+    // Note: We manually construct the path: /api/v1/reports/{id}/messages
+    String urlPath = "/api/v1/reports/" + String(reportId) + "/messages";
+
+    client.println("POST " + urlPath + " HTTP/1.1");
+    client.println("Host: " + String(host));
+    client.println("Authorization: Bearer " + bearerToken);
+    client.println("Accept: application/json");
+    client.println("Content-Length: " + String(totalLen));
+    client.println("Content-Type: multipart/form-data; boundary=" + boundary);
+    client.println(); // End of headers
+
+    // 5. Send Body
+    client.print(headPayload);
+    
+    // Stream file 1KB at a time to save RAM
+    uint8_t buf[1024];
+    while (file.available()) {
+        int bytesRead = file.read(buf, sizeof(buf));
+        client.write(buf, bytesRead);
+    }
+    
+    client.print(tailPayload);
+
+    // 6. Read Response
+    Serial.println("Upload sent. Waiting for response...");
+    while (client.connected() && !client.available()) delay(10); // Wait for data
+    
+    String responseLine = client.readStringUntil('\n'); // Read HTTP Status (e.g., "HTTP/1.1 201 Created")
+    Serial.println("Server Status: " + responseLine);
+    
+    // Optional: Read the rest of the body if you need debugging
+    while (client.available()) {
+        client.read(); // Flush buffer
     }
 
     file.close();
-    http.end();
+    client.stop();
 }
 
 #endif
