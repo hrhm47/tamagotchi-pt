@@ -5,7 +5,7 @@
 
 #include "PinConfig.h"
 #include "AudioRecorder.h"
-#include "WifiServer.h"
+#include "WifiConnection.h"
 #include "ApiClient.h"
 
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
