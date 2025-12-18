@@ -2,8 +2,8 @@
 #define CREDENTIALS_H
 
 // Change these to your home/school Wi-Fi network details
-#define WIFI_SSID "Wifi_Name"
-#define WIFI_PASS "Wifi_Password"
+#define WIFI_SSID "Jj's Wifi"
+#define WIFI_PASS "N03NT11A"
 
 #define MAX_CONNECTION_ATTEMPTS 50
 

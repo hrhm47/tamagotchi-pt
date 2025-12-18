@@ -8,7 +8,7 @@
 #include "PinConfig.h"
 #include <WiFiClientSecure.h>
 
-const char* serverBaseUrl = "https://poliisiautoweb.onrender.com/api/v1"; 
+const char* serverBaseUrl = "ADD YOUR SERVER URL HERE";
 String bearerToken = "";
 
 bool loginToApi() {
@@ -28,7 +28,7 @@ bool loginToApi() {
     doc["email"] = "testitamakotsi@example.com";
     doc["password"] = "testi1234";
     doc["device_name"] = "SafeGotchi_ESP32";
-    doc["api_key"] = "Zek1eSpDZv97dYoNL82KHCsHqHF8rTBc";
+    doc["api_key"] = "ADD YOUR API KEY HERE";
 
     String requestBody;
     serializeJson(doc, requestBody);
@@ -67,7 +67,7 @@ int sendApiReport() {
     
     StaticJsonDocument<300> doc;
     doc["description"] = "Test Report from Device";
-    doc["is_anonymous"] = false;
+    doc["is_anonymous"] = 0;
     
     String requestBody;
     serializeJson(doc, requestBody);
@@ -126,10 +126,6 @@ int sendApiMessage(String message, int reportId) {
 
   if (httpCode == 200 || httpCode == 201) {
         String payload = http.getString(); 
-        
-        Serial.print("Raw Server Response: ");
-        Serial.println(payload);
-
         StaticJsonDocument<1024> responseDoc;
         DeserializationError error = deserializeJson(responseDoc, payload); 
 
@@ -162,13 +158,10 @@ void sendApiVoiceRecording(int reportId) {
         return;
     }
 
-    // 1. Setup Connection
     WiFiClientSecure client;
-    client.setInsecure(); // Skip certificate check
+    client.setInsecure();
     
-    // Parse the domain and port from your serverBaseUrl
-    // Assuming serverBaseUrl is "https://poliisiautoweb.onrender.com/api/v1"
-    const char* host = "poliisiautoweb.onrender.com"; 
+    const char* host = "ADD YOUR SERVER DOMAIN HERE"; 
     const int port = 443;
 
     Serial.println("Connecting to upload audio...");
@@ -178,10 +171,9 @@ void sendApiVoiceRecording(int reportId) {
         return;
     }
 
-    // 2. Prepare Multipart Data
     String boundary = "------------------------Esp32Boundary7MA4YWxkTrZu0gW";
     
-    // The "Head" contains all your text fields (lat, lon, type)
+    // The head contains all your text fields (lat, lon, type)
     String headPayload = "";
     headPayload += "--" + boundary + "\r\n";
     headPayload += "Content-Disposition: form-data; name=\"type\"\r\n\r\naudio\r\n";
@@ -200,14 +192,9 @@ void sendApiVoiceRecording(int reportId) {
     headPayload += "Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n";
     headPayload += "Content-Type: audio/wav\r\n\r\n";
 
-    // The "Tail" is just the closing boundary
     String tailPayload = "\r\n--" + boundary + "--\r\n";
 
-    // 3. Calculate Total Size
     size_t totalLen = headPayload.length() + file.size() + tailPayload.length();
-
-    // 4. Send HTTP Headers
-    // Note: We manually construct the path: /api/v1/reports/{id}/messages
     String urlPath = "/api/v1/reports/" + String(reportId) + "/messages";
 
     client.println("POST " + urlPath + " HTTP/1.1");
@@ -216,9 +203,8 @@ void sendApiVoiceRecording(int reportId) {
     client.println("Accept: application/json");
     client.println("Content-Length: " + String(totalLen));
     client.println("Content-Type: multipart/form-data; boundary=" + boundary);
-    client.println(); // End of headers
+    client.println();
 
-    // 5. Send Body
     client.print(headPayload);
     
     // Stream file 1KB at a time to save RAM
@@ -230,14 +216,12 @@ void sendApiVoiceRecording(int reportId) {
     
     client.print(tailPayload);
 
-    // 6. Read Response
     Serial.println("Upload sent. Waiting for response...");
-    while (client.connected() && !client.available()) delay(10); // Wait for data
+    while (client.connected() && !client.available()) delay(10);
     
-    String responseLine = client.readStringUntil('\n'); // Read HTTP Status (e.g., "HTTP/1.1 201 Created")
+    String responseLine = client.readStringUntil('\n'); // Read the response status line
     Serial.println("Server Status: " + responseLine);
     
-    // Optional: Read the rest of the body if you need debugging
     while (client.available()) {
         client.read(); // Flush buffer
     }

@@ -10,8 +10,7 @@
 
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 
-// --- MENU DATA ---
-// You can add as many as you want. The menu loops.
+// Messages that are displayed in the menu.
 const char* messages[] = {
   "Keinuilla",      // At the swings
   "Aulassa",        // In the lobby
@@ -81,12 +80,12 @@ void triggerPanic() {
   if (reportId > 0) {
     tft.fillScreen(ST77XX_ORANGE);
     tft.setCursor(10, 80);
-    tft.println("UPLOADING VOICE...");
+    tft.println("Lahetetaan nauhoitusta...");
     sendApiVoiceRecording(reportId);
   }
 
   tft.fillScreen(ST77XX_GREEN);
-  tft.println("SENT TO CLOUD");
+  tft.println("LAHETETTY!");
   delay(2000);
   inMenu = true;
   drawMenu();
@@ -101,7 +100,7 @@ void triggerSendMessage() {
   tft.setTextColor(ST77XX_WHITE);
   tft.setTextSize(2);
   tft.setCursor(60, 100);
-  tft.println("Sending...");
+  tft.println("Lahetetaan...");
   delay(1000);
 
   int reportId = sendApiReport();
@@ -126,11 +125,10 @@ void triggerSendMessage() {
   
     tft.setCursor(10, 40);
     tft.setTextSize(3);
-    tft.println("SENT!");
+    tft.println("LAHETETTY!");
   
     tft.setTextSize(2);
     tft.setCursor(10, 90);
-    tft.println("Notified:");
   
     tft.setTextColor(ST77XX_RED);
     tft.setCursor(10, 120);
@@ -141,7 +139,7 @@ void triggerSendMessage() {
   
     tft.setCursor(10, 40);
     tft.setTextSize(3);
-    tft.println("Sending message FAILED!");
+    tft.println("VIESTIN LAHETYS EPAONNISTUI!");
   }
   
   delay(3000);
@@ -175,36 +173,23 @@ void setup() {
     }
 
     if (!loggedIn) {
-      // Let the user know we'll retry later (non-blocking retry can be added in loop)
       tft.fillScreen(ST77XX_YELLOW);
       tft.setTextColor(ST77XX_RED);
       tft.setTextSize(2);
-      tft.setCursor(10, 60); tft.println("API LOGIN FAILED");
+      tft.setCursor(10, 60); tft.println("Kirjautuminen epaonnistui!");
       tft.setTextSize(1);
-      tft.setCursor(10, 100); tft.println("Will retry later...");
+      tft.setCursor(10, 100); tft.println("Tarkista nettiyhteys");
       delay(1500);
     }
 
     drawMenu();
   }
-
-  //drawMenu();
 }
 
 void loop() {
-  // If not in menu (Panic mode), keep server alive
   if (!inMenu) {
-    //handleWebServer(); // Keep handling client requests
-
-    // --- NEW: Check for EXIT condition (BTN_NAV press) ---
-    if (digitalRead(BTN_NAV) == LOW) {
-      // 1. Clean Up
-      //stopWebServer();
-      
-      // 2. Reset State
+    if (digitalRead(BTN_NAV) == LOW) {;
       inMenu = true;
-      
-      // 3. Redraw Menu
       drawMenu();
       
       // Debounce
@@ -212,30 +197,28 @@ void loop() {
       delay(50);
       return; // Exit loop iteration to prevent running menu logic
     }
-    return; // Stay in server mode
+    return;
   }
 
-  // --- 1. HANDLE NAVIGATION (Single Button Cycling) ---
+  // Handle looping through menu items
   if (digitalRead(BTN_NAV) == LOW) {
     currentSelection++;
-    // Logic: If we go past the last item, loop back to 0
     if (currentSelection >= totalMessages) {
       currentSelection = 0;
     }
     drawMenu();
     
-    // Simple Debounce
     while(digitalRead(BTN_NAV) == LOW); // Wait for release
     delay(50); 
   }
 
-  // --- 2. HANDLE ENTER BUTTON (Logic for Double vs Single) ---
+  // handle enter button (Single and double press)
   if (digitalRead(BTN_ENTER) == LOW) {
     unsigned long now = millis();
     
-    // Check if this is a Double Click (Pressed again within 500ms)
+    // Check if this is a Double Click
     if (now - lastEnterTime < 500 && enterClicks == 1) {
-       triggerPanic(); // DOUBLE CLICK DETECTED
+       triggerPanic();
     } else {
        enterClicks = 1;
        lastEnterTime = now;
@@ -246,7 +229,7 @@ void loop() {
     delay(50); 
   }
 
-  // --- 3. CHECK FOR SINGLE CLICK TIMEOUT ---
+  // Check for Single Click timeout
   if (waitingForSingleClick && (millis() - lastEnterTime > 500)) {
      triggerSendMessage();
   }

@@ -11,18 +11,17 @@
 
 WebServer server(80);
 
-// --- New Function: Connect to Wi-Fi ---
 bool connectToWiFi(Adafruit_ST7789 &tft) {
   tft.fillScreen(ST77XX_BLUE);
   tft.setTextColor(ST77XX_WHITE);
   tft.setTextSize(2);
-  tft.setCursor(10, 20); tft.println("CONNECTING...");
+  tft.setCursor(10, 20); tft.println("YHDISTETAAN...");
 
   WiFi.mode(WIFI_STA); // Set to Station mode
   WiFi.begin(WIFI_SSID, WIFI_PASS);
 
   tft.setTextSize(1);
-  tft.setCursor(10, 60); tft.println("SSID:");
+  tft.setCursor(10, 60); tft.println("Wifi:");
   tft.setTextSize(2);
   tft.setCursor(10, 80); tft.println(WIFI_SSID);
 
@@ -40,10 +39,10 @@ bool connectToWiFi(Adafruit_ST7789 &tft) {
   if (WiFi.status() != WL_CONNECTED) {
     tft.fillScreen(ST77XX_RED);
     tft.setTextSize(2);
-    tft.setCursor(10, 50); tft.println("WIFI FAILED!");
+    tft.setCursor(10, 50); tft.println("WIFI EPAONNISTUI!");
     tft.setTextSize(1);
-    tft.setCursor(10, 80); tft.println("Check Credentials");
-    delay(5000); // Show failure for 5 seconds
+    tft.setCursor(10, 80); tft.println("Tarkista asetukset");
+    delay(5000);
     return false;
   }
 

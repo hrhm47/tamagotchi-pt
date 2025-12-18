@@ -22,7 +22,7 @@ void initMic() {
   const i2s_config_t i2s_config = {
     .mode = i2s_mode_t(I2S_MODE_MASTER | I2S_MODE_RX),
     .sample_rate = SAMPLE_RATE,
-    .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT, // Mic sends 32-bit
+    .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
     .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT, 
     .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_STAND_I2S),
     .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
@@ -49,14 +49,13 @@ void recordAudio(Adafruit_ST7789 &tft) {
   tft.fillScreen(ST77XX_RED);
   tft.setTextColor(ST77XX_WHITE);
   tft.setTextSize(2);
-  tft.setCursor(20, 50); tft.println("RECORDING...");
+  tft.setCursor(20, 50); tft.println("NAUHOITETAAN...");
   tft.drawRect(20, 100, 200, 20, ST77XX_WHITE);
 
   // Write Placeholder Header
   WavHeader header;
   file.write((uint8_t*)&header, sizeof(WavHeader)); 
 
-  // BUFFERS
   // We read 32-bit samples but write 16-bit samples (2x Faster!)
   size_t bytes_read;
   int32_t* i2s_read_buff = (int32_t*) calloc(256, sizeof(int32_t));
@@ -69,22 +68,20 @@ void recordAudio(Adafruit_ST7789 &tft) {
   int progress_width = 0;
 
   while (samples_recorded < total_samples) {
-    // 1. Read Raw Data (32-bit)
     i2s_read(I2S_PORT, (void*)i2s_read_buff, 256 * sizeof(int32_t), &bytes_read, portMAX_DELAY);
     
     int samples_in_batch = bytes_read / 4; // 4 bytes per 32-bit sample
 
-    // 2. Convert to 16-bit (Compression Step)
+    // Convert to 16-bit (Compression Step)
     // SPH0645 data is in the top 24 bits. We shift right by 14 to fit into 16 bits cleanly.
     for(int i=0; i<samples_in_batch; i++) {
         i2s_write_buff[i] = (i2s_read_buff[i] >> 14); 
     }
 
-    // 3. Write Compressed Data
     file.write((uint8_t*)i2s_write_buff, samples_in_batch * 2); // 2 bytes per 16-bit sample
     samples_recorded += samples_in_batch;
 
-    // 4. Smooth Animation
+    // Update Progress Bar
     if(millis() - last_draw > 300) {
         last_draw = millis();
         float percent = (float)samples_recorded / (float)total_samples;
@@ -99,14 +96,13 @@ void recordAudio(Adafruit_ST7789 &tft) {
   free(i2s_read_buff);
   free(i2s_write_buff);
 
-  // Update Header for 16-BIT Audio
   memcpy(header.riff_tag, "RIFF", 4); memcpy(header.wave_tag, "WAVE", 4);
   memcpy(header.fmt_tag, "fmt ", 4);  memcpy(header.data_tag, "data", 4);
   header.riff_length = file.size() - 8;
   header.fmt_length = 16; header.audio_format = 1; header.num_channels = 1;
   header.sample_rate = SAMPLE_RATE; 
-  header.bits_per_sample = 16;       // <--- CHANGED TO 16
-  header.byte_rate = SAMPLE_RATE * 2; // <--- CHANGED TO 2 BYTES
+  header.bits_per_sample = 16;
+  header.byte_rate = SAMPLE_RATE * 2;
   header.block_align = 2;
   header.data_length = file.size() - 44;
 
@@ -114,7 +110,7 @@ void recordAudio(Adafruit_ST7789 &tft) {
   file.write((uint8_t*)&header, sizeof(WavHeader));
   file.close();
 
-  Serial.println("Done.");
+  Serial.println("Audio recording done.");
   tft.fillScreen(ST77XX_BLACK); 
 }
 
