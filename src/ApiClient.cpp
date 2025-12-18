@@ -6,7 +6,7 @@
 #include <WiFiClientSecure.h>
 #include "ApiClient.h"
 
-const char* serverBaseUrl = "https://poliisiautoweb.onrender.com/api/v1";
+const char* serverBaseUrl = "WRITE YOUR SERVER URL HERE";
 String bearerToken = "";
 
 bool loginToApi() {
@@ -26,7 +26,7 @@ bool loginToApi() {
     doc["email"] = "testitamakotsi@example.com";
     doc["password"] = "testi1234";
     doc["device_name"] = "SafeGotchi_ESP32";
-    doc["api_key"] = "Zek1eSpDZv97dYoNL82KHCsHqHF8rTBc";
+    doc["api_key"] = "WRITE YOUR API KEY HERE";
 
     String requestBody;
     serializeJson(doc, requestBody);
@@ -159,7 +159,7 @@ void sendApiVoiceRecording(int reportId) {
     WiFiClientSecure client;
     client.setInsecure();
     
-    const char* host = "poliisiautoweb.onrender.com"; 
+    const char* host = "WRITE YOUR SERVER HOST HERE";
     const int port = 443;
 
     Serial.println("Connecting to upload audio...");
